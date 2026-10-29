@@ -1,69 +1,106 @@
-from flask import Flask, request
-import requests, sqlite3, os, datetime
+from flask import Flask, request, render_template_string
+import requests
+import os
 
 app = Flask(__name__)
 
-TOKEN = os.environ.get("TG_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
-WA_TOKEN = os.environ.get("WA_TOKEN", "YOUR_WHATSAPP_TOKEN")
-PHONE_ID = os.environ.get("PHONE_ID", "YOUR_PHONE_ID")
-VERIFY = "sr_team_07"
-MY_ID = "8931533687"
-NUM = "01887339991"
+# --- CONFIG ---
+BOT_TOKEN = "9299183989:AAEamZClB7qwjicyjndGe_Gft8B5mBBgL0A"
+BOT_USERNAME = "Sr_Team_07Bot"
+ADMIN_FILE = "admin_id.txt" # তোমার টেলিগ্রাম আইডি এখানে সেভ হবে
 
-db = sqlite3.connect("sr.db", check_same_thread=False)
-db.execute("CREATE TABLE IF NOT EXISTS users (wa TEXT PRIMARY KEY, name TEXT, bal INTEGER DEFAULT 0, joined TEXT)")
-db.execute("CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, wa TEXT, item TEXT, price INTEGER, date TEXT)")
-db.commit()
+WHATSAPP_NUMBER = "8801887339991"
+WHATSAPP_LINK = f"https://wa.me/{WHATSAPP_NUMBER}?text=Hi%20SR%20Team%2C%20I%20need%20help"
 
-def get_user(wa):
-    r = db.execute("SELECT * FROM users WHERE wa=?", (wa,)).fetchone()
-    if not r:
-        db.execute("INSERT INTO users(wa,name,bal,joined)VALUES(?,?,?,?)", (wa, wa, 0, datetime.date.today().isoformat()))
-        db.commit()
-        r = db.execute("SELECT * FROM users WHERE wa=?", (wa,)).fetchone()
-    return r
+def get_admin_id():
+    if os.path.exists(ADMIN_FILE):
+        with open(ADMIN_FILE, 'r') as f:
+            return f.read().strip()
+    return None
 
-def wa_send(to, txt):
+def save_admin_id(chat_id):
+    with open(ADMIN_FILE, 'w') as f:
+        f.write(str(chat_id))
+
+def send_telegram_message(chat_id, text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     try:
-        requests.post(
-            f"https://graph.facebook.com/v20.0/{PHONE_ID}/messages",
-            headers={"Authorization": f"Bearer {WA_TOKEN}"},
-            json={
-                "messaging_product": "whatsapp",
-                "to": to,
-                "type": "text",
-                "text": {"body": txt}
-            }
-        )
+        requests.post(url, json=data, timeout=10)
     except:
         pass
 
-@app.route('/profile/<wa>')
-@app.route('/pay/<wa>')
-def profile(wa):
-    user = get_user(wa)
-    name, bal = user[1], user[2]
-    orders = db.execute("SELECT * FROM orders WHERE wa=? ORDER BY id DESC LIMIT 20", (wa,)).fetchall()
-    hist = "".join([f"<div style='padding:10px;border-bottom:1px solid #eee'>{o[2]} - {o[3]}৳ - {o[4]}</div>" for o in orders]) or "কোনো অর্ডার নেই"
-    return f"<html><head><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{{font-family:sans-serif;background:#f2f3f5;margin:0}}.top{{background:#111;color:#fff;padding:25px;text-align:center;border-radius:0 0 25px 25px}}.card{{background:#fff;margin:-20px 15px;padding:20px;border-radius:15px}}.btn{{width:92%;padding:14px;margin:6px;border-radius:10px;border:none}}</style></head><body><div class='top'><h2>{name}</h2><small>{wa}</small><h1>{bal}</h1><small>বর্তমান ব্যালেন্স</small></div><div class='card'><h3>রিচার্জ করুন</h3><p>Bkash/Nagad: {NUM}</p><button class='btn' onclick='s(120)'>120৳</button><button class='btn' onclick='s(200)'>200৳</button><button class='btn' onclick='s(300)'>300৳</button><button class='btn' onclick='s(500)'>500৳</button><div id='s2' style='display:none'><h3 id='ah'></h3><input id='tx' placeholder='TrxID দিন' style='width:85%;padding:12px'><br><br><button class='btn' style='background:#2d3436;color:#fff' onclick='sub()'>Submit</button><p id='msg'></p></div><hr><h3>অর্ডার হিস্টোরি</h3><div>{hist}</div></div><script>let A=0;function s(a){{A=a;document.getElementById('s2').style.display='block';document.getElementById('ah').innerText=a+' ৳ রিচার্জ';}}function sub(){{let t=document.getElementById('tx').value;if(!t)return alert('TrxID দিন');fetch('/api/pay',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{wa:'{wa}',amt:A,trx:t}})}}).then(r=>{{document.getElementById('msg').innerText='পাঠানো হয়েছে';}});}}</script></body></html>"
-
-@app.route('/api/pay', methods=['POST'])
-def api_pay():
-    data = request.get_json()
-    wa_send(MY_ID, f"New Pay: {data['wa']} - {data['amt']} - {data['trx']}")
-    return "ok"
-
-@app.route('/webhook', methods=['GET','POST'])
-def webhook():
-    if request.method == 'GET':
-        if request.args.get('hub.verify_token') == VERIFY:
-            return request.args.get('hub.challenge')
-        return "verify failed"
-    return "ok"
+# --- HTML PAGE ---
+HTML_PAGE = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SR Team - WhatsApp Support</title>
+<style>
+body{font-family:system-ui;text-align:center;padding:40px;background:#f0f2f5}
+.card{background:white;padding:30px;border-radius:20px;max-width:400px;margin:auto;box-shadow:0 10px 30px rgba(0,0,0,0.1)}
+.btn{display:block;background:#25D366;color:white;padding:16px;border-radius:12px;text-decoration:none;font-weight:bold;font-size:18px;margin-top:20px}
+.btn-tg{background:#0088cc;margin-top:12px}
+small{color:#888}
+</style>
+</head>
+<body>
+<div class="card">
+<h2>📞 SR Team Support</h2>
+<p>WhatsApp এ মেসেজ দিন, সাথে সাথে Telegram এ নোটিফিকেশন যাবে</p>
+<a class="btn" onclick="notify()" href="__WALINK__">💬 WhatsApp এ মেসেজ করুন<br><small>01887339991</small></a>
+<a class="btn btn-tg" href="https://t.me/__BOTUSER__">🤖 Telegram Bot খুলুন</a>
+<p id="status"></p>
+</div>
+<script>
+function notify(){
+  fetch('/wa-click', {method:'POST'});
+  document.getElementById('status').innerText = 'Connecting to WhatsApp...';
+}
+</script>
+</body>
+</html>
+""".replace("__WALINK__", WHATSAPP_LINK).replace("__BOTUSER__", BOT_USERNAME)
 
 @app.route('/')
 def home():
-    return "Bot is Live"
+    return render_template_string(HTML_PAGE)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+@app.route('/wa-click', methods=['POST'])
+def wa_click():
+    admin_id = get_admin_id()
+    if admin_id:
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        send_telegram_message(admin_id, f"🔥 <b>নতুন কাস্টমার!</b>\n\nকেউ তোমার WhatsApp বাটনে ক্লিক করেছে!\nIP: {ip}\n\nএখনই WhatsApp চেক করো: 01887339991\nLink: {WHATSAPP_LINK}")
+    return "ok"
+
+# --- TELEGRAM WEBHOOK ---
+@app.route(f'/webhook/{BOT_TOKEN}', methods=['POST'])
+def webhook():
+    data = request.get_json()
+    if not data or 'message' not in data:
+        return "ok"
+    
+    chat_id = data['message']['chat']['id']
+    text = data['message'].get('text', '')
+    
+    # প্রথমবার /start দিলে তোমাকে Admin বানাবে
+    if text == '/start':
+        save_admin_id(chat_id)
+        send_telegram_message(chat_id, f"✅ ভাই সেটআপ Done!\n\nতোমার ID {chat_id} Admin হিসেবে Save হলো।\n\nএখন থেকে কেউ {WHATSAPP_LINK} ওয়েবসাইটের বাটনে ক্লিক করলেই তোমাকে এখানে নোটিফিকেশন দিবো।\n\nতোমার সাইট: https://sr-bot-zowq.onrender.com\nWhatsApp: 01887339991")
+    else:
+        # তুমি এখানে যা লিখবে সেটা কাস্টমারকে পাঠানোর সিস্টেম পরে বানাবো
+        send_telegram_message(chat_id, f"মেসেজ পেয়েছি: {text}\n\nAdmin ID: {chat_id}")
+
+    return "ok"
+
+@app.route('/set-webhook')
+def set_webhook():
+    # এই লিংকে একবার ঢুকলেই Webhook সেট হবে
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url=https://sr-bot-zowq.onrender.com/webhook/{BOT_TOKEN}"
+    r = requests.get(url)
+    return r.text
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
